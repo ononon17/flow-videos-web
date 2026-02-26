@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>浏览页面</title>
+<style>
+/* --- 基础样式 --- */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{background-color:#f6f7f9;color:#333;font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; height: 100vh; width: 100vw;}
+
+/* --- 页面容器 --- */
+.page-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+#grid-page-container { z-index: 1; background-color:#f6f7f9; padding: 10px; padding-bottom: 80px; }
+#fullscreen-page-container { z-index: 2; background-color:#000; transform: translateX(100%); scroll-snap-type:y mandatory; overflow-y:scroll;}
+#fullscreen-page-container.active { transform: translateX(0); }
+
+/* --- 首页网格 --- */
+#grid-feed { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid-item { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.05); position: relative; cursor: pointer; }
+.grid-video-wrapper { position: relative; width: 100%; padding-bottom: 133%; background: #000; pointer-events: none; }
+.grid-video-wrapper video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+.grid-play-icon { position: absolute; top: 10px; right: 10px; color: rgba(255,255,255,0.9); font-size: 16px; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+.card-footer { padding: 10px; }
+.video-desc-grid { font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: #333; margin-bottom: 8px; min-height: 36px; }
+.card-user-info { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #999; }
+.user-name { display: flex; align-items: center; }
+.user-avatar { width: 18px; height: 18px; background: #eee; border-radius: 50%; margin-right: 5px; }
+
+/* --- 全屏沉浸页 --- */
+.fs-video-item { position:relative;width:100%;height:100%;scroll-snap-align:start;display:flex;justify-content:center;align-items:center;background:#000;overflow:hidden }
+.fs-video-item video { width:100%;height:100%;object-fit:cover;display:block }
+.overlay { position:absolute;bottom:0;left:0;width:100%;height:100%;pointer-events:none;background:linear-gradient(to top,rgba(0,0,0,0.6),transparent 35%);display:flex;flex-direction:column;justify-content:flex-end;padding:20px 15px; color:#fff; }
+.sidebar-fs { position:absolute;right:10px;bottom:100px;display:flex;flex-direction:column;gap:20px;pointer-events:auto;align-items:center;z-index:10; color:#fff; }
+.icon-btn-fs { width:40px;height:40px;background:rgba(255,255,255,0.15);border-radius:50%;display:flex;justify-content:center;align-items:center;font-size:22px;backdrop-filter:blur(4px); }
+
+/* --- 全局悬浮按钮 --- */
+#global-finish-btn { 
+    position: fixed; right: 20px; bottom: 30px; z-index: 9999; 
+    width: 55px; height: 55px; background: #25D366; color: white; 
+    font-size: 13px; font-weight: bold; display: none; /* 初始隐藏 */
+    flex-direction: column; justify-content: center; align-items: center; 
+    border-radius: 50%; cursor: pointer; box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4); 
+}
+#global-back-btn { position: fixed; top: 30px; left: 20px; z-index: 9999; width: 36px; height: 36px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 50%; backdrop-filter: blur(4px); display: none; justify-content: center; align-items: center; }
+
+/* --- 结果弹窗 (增强逻辑) --- */
+#result-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10000; justify-content: center; align-items: center; }
+.modal-content { background: #fff; color: #333; padding: 25px; border-radius: 16px; width: 85%; max-width: 320px; text-align: center; position: relative; }
+.code-box { background: #f1f3f5; padding: 12px; margin: 15px 0; font-family: monospace; font-size: 11px; line-height:1.4; color: #d32f2f; border: 1px dashed #ccc; border-radius: 8px; word-break: break-all; }
+.copy-btn { background: #2196F3; color: white; border: none; padding: 12px 0; border-radius: 8px; font-size: 16px; font-weight: bold; width: 100%; cursor: pointer; margin-bottom: 10px; }
+.close-btn { background: #eee; color: #666; border: none; padding: 10px 0; border-radius: 8px; font-size: 14px; width: 100%; cursor: pointer; }
+#modal-x-btn { position: absolute; top: 10px; right: 15px; font-size: 24px; color: #bbb; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div id="grid-page-container" class="page-container">
+    <div id="grid-feed"></div>
+</div>
+
+<div id="fullscreen-page-container" class="page-container">
+    <div id="fullscreen-feed"></div>
+</div>
+
+<div id="global-finish-btn" onclick="openModal(true)">✔<br>结束</div>
+<div id="global-back-btn" onclick="exitFullScreen()">❮</div>
+
+<div id="result-modal">
+    <div class="modal-content">
+        <div id="modal-x-btn" onclick="closeModal()">×</div>
+        <div style="font-weight:bold; font-size:18px;">实验提醒</div>
+        <p style="font-size:13px; color:#666; margin-top:10px;">请务必复制下方验证码：<br>(已自动尝试复制到剪切板)</p>
+        <div class="code-box" id="code-display">加载中...</div>
+        <button class="copy-btn" onclick="copyCode()">手动复制验证码</button>
+        <button id="modal-return-btn" class="close-btn" onclick="closeModal()">继续浏览</button>
+    </div>
+</div>
+
+<script>
+// --- 1. 数据定义 ---
+const adRaw = [
+    { url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/6f41955d07179e17aa0e3b87394cf88c.MP4?Expires=1772093850&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=3RAi%2FxSyoFhfNp8hYY7gWZhd%2FGw%3D", desc: "浪琴表：优雅态度，真我个性", adProduct: "Longines", type: "ad" },
+    { url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/1a2ab6a2567fa104084b1f1ef0f366fe.MP4?Expires=1772093777&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=cWoR4hTwLI9%2FgzZEf4x%2B7uYMWYo%3D", desc: "卡西欧：坚韧不止，潮流先锋", adProduct: "Casio", type: "ad" },
+    { url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/1c119470ab39cf18c4c7da419f8b4276.mov?Expires=1772093789&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=K8LYXo%2FOTeaj5pQreCeNafZ53sQ%3D", desc: "OPPO：科技之善，一瞬倾心", adProduct: "OPPO", type: "ad" },
+    { url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/d185adecd1feadf6fcb59df491fa1ee6.MP4?Expires=1772093947&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=DMndm5dbuFZ8pTnmJ2J41Gt8ObI%3D", desc: "荣耀：笃行致远，荣耀同行", adProduct: "Honor", type: "ad" },
+    { url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/8335b86b739187f29afcb3a8ed798b60.mov?Expires=1772093862&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=b3M7Jic3Jn11C1dg8MoZp8IzYfI%3D", desc: "大宝：天天见，真情守护", adProduct: "Dabao", type: "ad" },
+    { url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/89a65e149982ff319e90d49de2de4058.MP4?Expires=1772094100&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=42oLdZUOJNvSe5skeMxGbMQycKg%3D", desc: "自然堂：你本来就很美", adProduct: "Chando", type: "ad" }
+];
+
+const nativeLinks = ["https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/014ff2312c0eeaa4c7f801e3544d4302.mov?Expires=1772093658&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=uL8AtyNUKyC4gVJVqxIsrINkfQk%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/03b18c6151c04b68ae573894bb2c1370.MP4?Expires=1772093698&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=UGwmvzHzZ2fcGVKUGrOhD%2BwEXbs%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/072a130e6fe54342aef13ce8bc81bc84.mov?Expires=1772093714&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=VM31IsGAWIBKrU7XSqkHW5AxVLc%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/0e9ce81ab7ae5612973e168ae530e7bd.MP4?Expires=1772093720&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=rL3NLxq%2B7umbc7LYmvEFhjqBu1U%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/10292bbf1c9c525b1a8a5fac54125a48.mov?Expires=1772093753&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=nz2dP2QAWGV4hCtMbBdEPOSI7JA%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/18b6f4865bade59168068d120b9fa70b.MP4?Expires=1772093766&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=ytRF4%2BnrxRWfYsSm%2FV6NVjc4x%2Bk%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/1b7d44ae2f3bf47cea1a0521feffc97c.MP4?Expires=1772093784&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=CkRjBvGoGoCk1WZ9KugtgoKQ4H4%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/222ddf22f8ecdd36fdd6b338a36d97f5.MP4?Expires=1772093796&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=iIPXb%2BXcYa50Cv1hvDJmg1no66k%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/224d2320db82f468e0f61bac29b0631d.MP4?Expires=1772093802&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=6nvb2ZQ4rGZN6OpEkePbALlKaA4%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/2c13f0ec2632db517d5121ede6b64993.mov?Expires=1772093809&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=lvY6dMkGNT0Re4m020sAX%2FyUuGA%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/3b03c532c9ab2488380b510b20795dce.MP4?Expires=1772093815&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=6AakojXuBw8ee5PR770UvkYEkD8%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/4cc6bbd6c027d96cef6ca79c7dab2b9d.mov?Expires=1772093821&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=hB9SHsED%2FUPxRUJlCoUChrMZm4g%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/50ea2aad16b82e75f3310ce019c4e358.MP4?Expires=1772093827&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=IaUAFbajVQSZq7%2BrrBouKGsDkvA%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/54ac52d07178f6e577b88f5a691cdae6.MP4?Expires=1772093833&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=R3L5ErFoqYgf2oh4nn6o3NVRwFw%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/6ea9d5dc591d7b94bca7bc52225df31f.MP4?Expires=1772093842&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=StyNIMJ6gzknklhCsWFP9KESeKc%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/809f8bca29d20f298627b62e0a66e1a1.MP4?Expires=1772093856&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=XKg0Upts38wo7AIEFc35AGtB0yk%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/899d1c39ab8c6355619af4d1b63b57f4.MP4?Expires=1772093868&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=qBHEBb2%2F1pKWg9eQfHOGeUOal98%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/9490d9ae3898c3c6fe64478787e12305.MP4?Expires=1772093876&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=1gIHkdR%2BriRyi1gEc3%2FqK7ZUoz0%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/9697e3b13e163eb2ac045428d1bd5fa7.MP4?Expires=1772093881&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=foxZOYLLrJxOLfbWLl6wW18P%2Fu0%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/9cb3038b5cd9cf8a5e0d3dbd3777079f.MP4?Expires=1772093888&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=F%2BEKiG3hhim8Npz9MKuSgmu2MaI%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/a725c0c79871ef092a27ca786b199813.MP4?Expires=1772093894&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=z4Y%2BqPlsMc2K%2FrIAWNIjcVdtacs%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/ad54701eecc91d9d63655b90bd6a9a28.MP4?Expires=1772093899&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=ZJJ9nRBxS0gHrq3jNKlwVO6N9Dc%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/ba5692b9bb0f19ef899c43aaec24b874.MP4?Expires=1772093903&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=6G5J1OSOZuri%2FtpMD1PIMGaxJCU%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/c111d107b33699d5d4bf2528eb7c757c.MP4?Expires=1772093910&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=%2BwLaTuWXzGid9atq%2F9EcGI70csE%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/c12c417443e17e37f597e63c16e0ae80.MP4?Expires=1772093917&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=4nxVdTgXqqtjUpqeaebMgQ0XduA%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/c291690cf2ad86c1fb5bd8c6492476c4.MP4?Expires=1772093926&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=y16xy3%2FzHzZugHIhZn0Gb2aQM9I%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/c429a062f64d9b817c0e0332f5dbe3f9.MP4?Expires=1772093931&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=nc3iaFeSAtakyJ6oGCDsJYoIMj0%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/c70155ef59964ab38f15589833a670ba.MP4?Expires=1772093936&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=gITTrysqWTtZZxmqycpBgQV5XfI%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/ca7fa1fb72c5847d8766ce10f3372788.MP4?Expires=1772093942&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=UEf7rYW9LplOKp8SwOsgUqzSDDo%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/d1ce20c07df8e58e2c0234d038d5ff9c.MP4?Expires=1772093951&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=aZpYoATpNC8eZvl88q%2FegoiHGEA%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/d274bd241a4ac6177358ec440509b9f9.MP4?Expires=1772093955&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=xdgAZQtTrGTy49mXUrMwTvF9feA%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/d7bca7e3fb4c3a984773b2b6f45a7d04.MP4?Expires=1772093966&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=Lz34gBDXa2s0xopMF0ikH6Bf%2FBU%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/d92e7a8c43b8f52618e52b227cb49d4a.MP4?Expires=1772093970&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=HUntbOTAMCgvqFmz5rC0vbd0duM%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/db3c30002d626d081680a6a99c2cad8e.MP4?Expires=1772093978&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=5yjxr6QRBt3AXaUr0J%2BN2zqA1vE%3D","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/fe37a2d2bfe0e2c6e357705a62a5de53.MP4?Expires=1772093982&OSSAccessKeyId=TMP.3Krrnhzj5gWJZTZtmcGA6PBzREBDHuh7BaicM7AmJgn73D3sMWvoTGxRvgnXpqycsvPNgAWKzr7UU5nvJFc9QzzroCcR6W&Signature=%2B%2FI5UVLUcjzDUXuE%2F9f97RYHFZQ%3D"];
+
+// --- 2. 混合逻辑 ---
+function shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+    return array;
+}
+
+function buildPlaylist() {
+    let finalData = [];
+    const shuffledNative = shuffle([...nativeLinks]);
+    const shuffledAds = shuffle([...adRaw]);
+    let nativeIdx = 0, adIdx = 0;
+    for (let i = 0; i < 6; i++) {
+        for (let j = 0; j < 5; j++) {
+            finalData.push({ url: shuffledNative[nativeIdx++], desc: "你喜欢这个视频吗？", type: "content" });
+        }
+        finalData.push(shuffledAds[adIdx++]);
+    }
+    while (nativeIdx < shuffledNative.length) {
+        finalData.push({ url: shuffledNative[nativeIdx++], desc: "内容引起舒适", type: "content" });
+    }
+    return finalData;
+}
+
+const videoData = buildPlaylist();
+
+// --- 3. 核心逻辑控制 ---
+let adStats = { "Longines": 0, "Casio": 0, "OPPO": 0, "Honor": 0, "Dabao": 0, "Chando": 0 }; 
+let currentAdEnterTime = 0, currentAdProduct = null, isViewingAd = false;
+let forceEnd = false; // 是否为强制结束状态
+
+// 渲染网格
+videoData.forEach((item, idx) => {
+    const d = document.createElement('div');
+    d.className = 'grid-item';
+    d.innerHTML = `<div class="grid-video-wrapper"><video src="${item.url}#t=0.1" preload="metadata" muted></video><div class="grid-play-icon">▶</div></div><div class="card-footer"><div class="video-desc-grid">${item.desc}</div><div class="card-user-info"><div class="user-name">用户_${1000 + idx}</div><div>❤ ${Math.floor(Math.random()*500)}</div></div></div>`;
+    d.onclick = () => enterFullScreen(idx);
+    document.getElementById('grid-feed').appendChild(d);
+});
+
+// 渲染全屏
+videoData.forEach((item, idx) => {
+    const d = document.createElement('div');
+    d.className = 'fs-video-item';
+    if(item.type === 'ad') { d.setAttribute('data-is-ad', 'true'); d.setAttribute('data-product', item.adProduct); }
+    d.innerHTML = `<video src="${item.url}" loop playsinline></video><div class="sidebar-fs"><div class="icon-btn-fs">❤</div><div class="icon-btn-fs">💬</div></div><div class="overlay"><div class="user-name-fs">@用户_${1000+idx}</div><div>${item.desc}</div></div>`;
+    document.getElementById('fullscreen-feed').appendChild(d);
+});
+
+const fsVideoElements = document.querySelectorAll('.fs-video-item');
+
+function enterFullScreen(index) {
+    document.getElementById('fullscreen-page-container').classList.add('active');
+    fsVideoElements[index].scrollIntoView();
+    fsVideoElements[index].querySelector('video').play();
+    document.getElementById('global-back-btn').style.display = 'flex';
+}
+
+function exitFullScreen() {
+    document.getElementById('fullscreen-page-container').classList.remove('active');
+    fsVideoElements.forEach(el => el.querySelector('video').pause());
+    document.getElementById('global-back-btn').style.display = 'none';
+}
+
+// 4. 自动化定时任务
+// 用户进入页面 120秒 (2分钟) 后自动触发
+setTimeout(() => {
+    openModal(false); // 第一次弹出，允许关闭
+}, 120000);
+
+function openModal(isFinal) {
+    // 结算当前广告时间
+    if (isViewingAd && currentAdProduct) {
+        adStats[currentAdProduct] += (Date.now() - currentAdEnterTime);
+        isViewingAd = false;
+    }
+
+    const modal = document.getElementById('result-modal');
+    const xBtn = document.getElementById('modal-x-btn');
+    const returnBtn = document.getElementById('modal-return-btn');
+    
+    // 生成验证码
+    const r = Math.random().toString(36).substring(2, 5).toUpperCase();
+    const code = `W1:${(adStats["Longines"]/1000).toFixed(1)}s,W2:${(adStats["Casio"]/1000).toFixed(1)}s,P1:${(adStats["OPPO"]/1000).toFixed(1)}s,P2:${(adStats["Honor"]/1000).toFixed(1)}s,S1:${(adStats["Dabao"]/1000).toFixed(1)}s,S2:${(adStats["Chando"]/1000).toFixed(1)}s`;
+    const fullCode = `${r}-${code}`;
+    document.getElementById('code-display').innerText = fullCode;
+
+    // 自动复制
+    navigator.clipboard.writeText(fullCode).catch(() => console.log("复制受限"));
+
+    if (isFinal) {
+        // 强制结束：隐藏所有退出途径
+        forceEnd = true;
+        xBtn.style.display = 'none';
+        returnBtn.style.display = 'none';
+        document.getElementById('global-finish-btn').style.display = 'none';
+    }
+    
+    modal.style.display = 'flex';
+    exitFullScreen();
+}
+
+function closeModal() {
+    if (forceEnd) return; // 强制状态下不可关闭
+    document.getElementById('result-modal').style.display = 'none';
+    // 关闭后显示右下角的“结束”按钮
+    document.getElementById('global-finish-btn').style.display = 'flex';
+}
+
+function copyCode() {
+    const txt = document.getElementById('code-display').innerText;
+    navigator.clipboard.writeText(txt).then(() => alert("验证码已存入剪切板！"));
+}
+
+// 数据监测
+const observer = new IntersectionObserver(entries => {
+    if (!document.getElementById('fullscreen-page-container').classList.contains('active')) return;
+    entries.forEach(entry => {
+        const v = entry.target.querySelector('video');
+        const isAd = entry.target.getAttribute('data-is-ad') === 'true';
+        const productName = entry.target.getAttribute('data-product');
+        if (entry.isIntersecting) {
+            v.play();
+            if (isAd) { currentAdEnterTime = Date.now(); currentAdProduct = productName; isViewingAd = true; }
+        } else {
+            v.pause();
+            if (isAd && isViewingAd && currentAdProduct === productName) {
+                adStats[productName] += (Date.now() - currentAdEnterTime);
+                isViewingAd = false;
+            }
+        }
+    });
+}, { threshold: 0.6, root: document.getElementById('fullscreen-page-container') });
+fsVideoElements.forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
