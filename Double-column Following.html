@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><title>Double-column Follow</title>
+<style>
+/* --- 基础样式 --- */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{background-color:#f6f7f9;color:#333;font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; height: 100vh; width: 100vw;}
+
+/* --- 实验准备页 --- */
+#prep-page { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #000; color: #fff; z-index: 50000; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+#prep-page h1 { font-size: 32px; margin-bottom: 20px; letter-spacing: 2px; }
+#prep-page p { font-size: 18px; color: #888; margin-bottom: 60px; }
+#start-btn { background-color: #ff2442; color: white; padding: 18px 60px; border-radius: 12px; font-size: 20px; font-weight: bold; border: none; cursor: pointer; }
+
+/* --- 首页顶栏 (关注激活) --- */
+.grid-top-nav { position: fixed; top: 0; left: 0; width: 100%; height: 50px; display: flex; justify-content: center; align-items: center; background: #fff; border-bottom: 1px solid #eee; gap: 30px; z-index: 1000; }
+.nav-item { font-size: 16px; color: #999; cursor: pointer; position: relative; }
+.nav-item.active { color: #333; font-weight: bold; }
+.nav-item.active::after { content: ''; position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%); width: 15px; height: 2.5px; background: #ff2442; border-radius: 2px; }
+
+/* --- 容器 --- */
+.page-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; overflow-y: auto; transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+#grid-page-container { z-index: 1; background-color:#f6f7f9; padding: 60px 10px 80px 10px; display: none; }
+#fullscreen-page-container { z-index: 2; background-color:#000; transform: translateX(100%); scroll-snap-type:y mandatory; overflow-y:scroll;}
+#fullscreen-page-container.active { transform: translateX(0); }
+
+/* --- 首页双列布局 (图片极速加载版) --- */
+#grid-feed { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid-item { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.05); position: relative; cursor: pointer; display: flex; flex-direction: column; }
+.grid-img-wrapper { position: relative; width: 100%; padding-bottom: 133%; background: #eaeaea; }
+.grid-img-wrapper img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+.card-footer { padding: 10px; background: #fff; flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+.video-desc-grid { font-size: 13px; line-height: 1.4; height: 36px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #333; margin-bottom: 8px; }
+.card-meta { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #999; }
+
+/* --- 全屏播放布局 (单例渲染层级) --- */
+.fs-video-item { position:relative; width:100vw; height:100vh; scroll-snap-align:start; background:#000; display:flex; justify-content:center; align-items:center; overflow:hidden; }
+.video-poster { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; background: #111; }
+.pause-icon { position: absolute; font-size: 80px; color: rgba(255,255,255,0.4); pointer-events: none; display: none; z-index: 50; }
+.fs-video-item.is-paused .pause-icon { display: block; }
+
+.overlay { position:absolute; bottom:0; left:0; width:100%; padding: 0 95px 45px 15px; pointer-events:none; z-index:10; color:#fff; background: linear-gradient(to top, rgba(0,0,0,0.8), transparent 45%); }
+.fs-user-name { font-weight: bold; font-size: 16px; margin-bottom: 8px; display: block; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+.fs-desc { font-size: 14px; line-height: 1.4; opacity: 0.95; display: block; }
+
+.sidebar-fs { position:absolute; right:12px; bottom:110px; display:flex; flex-direction:column; gap:22px; pointer-events:auto; align-items:center; z-index:100; width: 50px; }
+.icon-group { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; text-align: center; }
+.icon-btn-fs { width: 48px; height: 48px; background: rgba(255,255,255,0.15); border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 28px; backdrop-filter: blur(8px); color: #ffffff; cursor: pointer; margin-bottom: 4px; }
+.icon-btn-fs.liked { color: #ff2442; }
+.fs-count { font-size: 12px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); width: 100%; }
+
+/* --- 其它 --- */
+.floating-heart { position: fixed; pointer-events: none; color: #ff2442; font-size: 100px; z-index: 9999; transform: translate(-50%, -50%) scale(0); opacity: 0; animation: heartFloat 0.8s ease-out; }
+@keyframes heartFloat { 0% { transform: translate(-50%, -50%) scale(0) rotate(-15deg); opacity: 0; } 20% { transform: translate(-50%, -50%) scale(1.2) rotate(-15deg); opacity: 1; } 100% { transform: translate(-50%, -160%) scale(1.5) rotate(-15deg); opacity: 0; } }
+#global-back-btn { position: fixed; top: 30px; left: 20px; z-index: 9999; width: 40px; height: 40px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 50%; display: none; justify-content: center; align-items: center; color: #fff; font-weight: bold; font-size: 20px; cursor: pointer; backdrop-filter: blur(4px); }
+#result-modal { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.95); z-index: 60000; justify-content: center; align-items: center; }
+.modal-content { background: #fff; color: #333; padding: 30px 25px; border-radius: 20px; width: 85%; max-width: 320px; text-align: center; }
+.code-box { background: #f8f9fa; padding: 15px; margin: 15px 0; font-family: monospace; font-size: 11px; color: #d32f2f; border: 1px dashed #ced4da; border-radius: 10px; word-break: break-all; }
+.copy-btn { background: #007bff; color: white; border: none; padding: 14px 0; border-radius: 10px; font-size: 16px; font-weight: bold; width: 100%; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div id="prep-page">
+    <h1>实验准备就绪</h1>
+    <p>请开启手机音量</p>
+    <button id="start-btn" onclick="startBrowsing()">点击开始浏览</button>
+</div>
+
+<div id="grid-top-nav" class="grid-top-nav" style="display:none;">
+    <span class="nav-item active">关注</span>
+    <span class="nav-item">推荐</span>
+</div>
+
+<div id="grid-page-container" class="page-container"><div id="grid-feed"></div></div>
+<div id="fullscreen-page-container" class="page-container"><div id="fullscreen-feed"></div></div>
+<div id="global-back-btn" onclick="exitFullScreen()">❮</div>
+
+<div id="result-modal">
+    <div class="modal-content">
+        <div style="font-weight:bold; font-size:18px;">实验结束</div>
+        <p style="font-size:13px; color:#666; margin-top:10px;">请复制验证码并填入问卷：</p>
+        <div class="code-box" id="code-display"></div>
+        <button class="copy-btn" onclick="copyCode()">复制验证码</button>
+    </div>
+</div>
+
+<script>
+// --- 1. 数据配置 (保持一致) ---
+const adRaw = [
+    { id: "W1", url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/6f41955d07179e17aa0e3b87394cf88c.MP4", desc: "Longines浪琴表：优雅态度，真我个性⌚️" },
+    { id: "W2", url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/1a2ab6a2567fa104084b1f1ef0f366fe.MP4", desc: "CASIO卡西欧：坚韧不止，潮流先锋🤘" },
+    { id: "P1", url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/1c119470ab39cf18c4c7da419f8b4276.mov", desc: "OPPO Find X：科技之善，一瞬倾心📱" },
+    { id: "P2", url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/d185adecd1feadf6fcb59df491fa1ee6.MP4", desc: "HONOR荣耀：笃行致远，荣耀同行🚀" },
+    { id: "S1", url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/8335b86b739187f29afcb3a8ed798b60.mov", desc: "大宝：天天见，真情守护 SOD蜜✨" },
+    { id: "S2", url: "https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/89a65e149982ff319e90d49de2de4058.MP4", desc: "自然堂：雪域冰肌，你本来就很美🏔️" }
+];
+
+const nativeCats = [
+    { links: ["https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/9cb3038b5cd9cf8a5e0d3dbd3777079f.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/d1ce20c07df8e58e2c0234d038d5ff9c.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/6ea9d5dc591d7b94bca7bc52225df31f.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/ba5692b9bb0f19ef899c43aaec24b874.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/9490d9ae3898c3c6fe64478787e12305.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/809f8bca29d20f298627b62e0a66e1a1.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/072a130e6fe54342aef13ce8bc81bc84.mov","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/d274bd241a4ac6177358ec440509b9f9.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/10292bbf1c9c525b1a8a5fac54125a48.mov"], titles: ["谁懂啊！这盘甜点太治愈了🍜", "救命...深夜食堂的魅力吗🍰", "绝绝子！这个汉堡真的太美味了✨", "五分钟学会火腿肠焖鸡蛋🤤", "家人们，我真的笑发财了🍳", "本地人私藏！这才是蛋糕天花板🍕", "复刻成功！在家做出顶级火鸡面🥩", "这色泽！看到最后流了一地口水💦", "今日份快乐是拿铁给的🥘"] },
+    { links: ["https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/224d2320db82f468e0f61bac29b0631d.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/0e9ce81ab7ae5612973e168ae530e7bd.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/c291690cf2ad86c1fb5bd8c6492476c4.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/c429a062f64d9b817c0e0332f5dbe3f9.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/db3c30002d626d081680a6a99c2cad8e.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/c111d107b33699d5d4bf2528eb7c757c.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/d7bca7e3fb4c3a984773b2b6f45a7d04.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/03b18c6151c04b68ae573894bb2c1370.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/fe37a2d2bfe0e2c6e357705a62a5de53.MP4"], titles: ["综艺名场面！全场都被燃到了🔥", "这段我真的笑到打鸣，看了十遍🤣", "神级转场！这也太丝滑了🎬", "真情流露：全场嘉宾都看哭了😭", "爆笑预警！这个梗我能玩一年🤡", "名侦探时刻！这波分析我内行🕵️", "这就是专业选手的实力🙏", "社死现场：我替人尴尬的毛病犯了🙈", "反转剧情：不到最后一秒绝对猜不到剧情🌀"] },
+    { links: ["https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/d92e7a8c43b8f52618e52b227cb49d4a.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/3b03c532c9ab2488380b510b20795dce.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/899d1c39ab8c6355619af4d1b63b57f4.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/ad54701eecc91d9d63655b90bd6a9a28.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/a725c0c79871ef092a27ca786b199813.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/1b7d44ae2f3bf47cea1a0521feffc97c.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/54ac52d07178f6e577b88f5a691cdae6.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/18b6f4865bade59168068d120b9fa70b.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/9697e3b13e163eb2ac045428d1bd5fa7.MP4"], titles: ["现代人的精神状态", "笑发财了，这操作我没见过💰", "如何在一分钟内让全场沉默🤡", "今日幽默已送达，请签收📮", "我和大冤种朋友的日常👭", "本来挺伤感，看到最后笑喷了💥", "这届网友太有才了💬", "社恐噩梦：路上遇到熟人躲避方式👻", "谁设计的剧情？站出来👊"] },
+    { links: ["https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/2c13f0ec2632db517d5121ede6b64993.mov","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/222ddf22f8ecdd36fdd6b338a36d97f5.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/4cc6bbd6c027d96cef6ca79c7dab2b9d.mov","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/ca7fa1fb72c5847d8766ce10f3372788.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/c70155ef59964ab38f15589833a670ba.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/014ff2312c0eeaa4c7f801e3544d4302.mov","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/50ea2aad16b82e75f3310ce019c4e358.MP4","https://interfaceexperience.oss-cn-hangzhou.aliyuncs.com/c12c417443e17e37f597e63c16e0ae80.MP4"], titles: ["云南旅游的正确顺序📸", "大理日落值得奔赴千里🌊", "累了就去云南发发呆吧☁️", "大理，连空气都是自由的🍃", "云南洱海：此生必去的地方📍", "大理洱海，向往的生活🏞️", "云南旅游避坑指南，收藏📑", "真的像在天堂的错觉🌴"] }
+];
+
+// --- 逻辑变量 ---
+let adStats = { "W1":0, "W2":0, "P1":0, "P2":0, "S1":0, "S2":0 };
+let playlist = [], clickTimer = null, transitionLock = false;
+
+// ！！！【全局单例播放器】！！！
+const globalPlayer = document.createElement('video');
+globalPlayer.loop = true;
+globalPlayer.playsInline = true;
+globalPlayer.setAttribute('webkit-playsinline', 'true');
+globalPlayer.style.width = '100%';
+globalPlayer.style.height = '100%';
+globalPlayer.style.objectFit = 'cover';
+globalPlayer.style.position = 'absolute';
+globalPlayer.style.top = '0';
+globalPlayer.style.left = '0';
+globalPlayer.style.opacity = '0'; // 初始透明
+globalPlayer.style.transition = 'opacity 0.2s ease';
+
+// 核心：只有在全屏容器被激活时，才允许播放器显示出画面
+globalPlayer.addEventListener('playing', () => {
+    if (document.getElementById('fullscreen-page-container').classList.contains('active')) {
+        globalPlayer.style.opacity = '1';
+    }
+});
+
+function shuffle(a) { for (let i = a.length-1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+function initData() {
+    let allN = [];
+    nativeCats.forEach(c => c.links.forEach((l, i) => allN.push({ url: l, desc: c.titles[i], likes: (Math.random()*8+1).toFixed(1)+"w", type: "content" })));
+    shuffle(allN);
+    let sAds = shuffle([...adRaw]).map(ad => ({ ...ad, likes: (Math.random()*2+1).toFixed(1)+"w", type: "ad" }));
+    for (let i = 1, ni = 0, ai = 0; i <= 41; i++) {
+        if ([6,12,18,24,30,36].includes(i)) playlist.push(sAds[ai++]); else playlist.push(allN[ni++]);
+    }
+}
+
+function startBrowsing() {
+    document.getElementById('prep-page').style.display = 'none';
+    document.getElementById('grid-page-container').style.display = 'block';
+    document.getElementById('grid-top-nav').style.display = 'flex';
+    
+    // 核心：静音预热，并放到最底层(-1)，彻底防止“漏音”和“鬼影”
+    globalPlayer.style.zIndex = '-1'; 
+    document.body.appendChild(globalPlayer);
+    globalPlayer.src = playlist[0].url; 
+    
+    globalPlayer.muted = true; // ！！！必须静音！！！
+    globalPlayer.play().then(() => { globalPlayer.pause(); }).catch(()=>{});
+
+    setTimeout(() => openModal(false), 120000); 
+}
+
+function renderUI() {
+    const g = document.getElementById('grid-feed'), f = document.getElementById('fullscreen-feed');
+    playlist.forEach((item, i) => {
+        
+        const posterUrl = `${item.url}?x-oss-process=video/snapshot,t_100,f_jpg`;
+
+        // 1. 网格渲染
+        const gd = document.createElement('div'); gd.className = 'grid-item';
+        gd.innerHTML = `
+            <div class="grid-img-wrapper">
+                <img src="${posterUrl}" loading="lazy" onerror="this.style.display='none'">
+            </div>
+            <div class="card-footer">
+                <div class="video-desc-grid">${item.desc}</div>
+                <div class="card-meta"><span>用户_${1000+i}</span><span>❤ ${item.likes}</span></div>
+            </div>`;
+        gd.onclick = () => enterFS(i); 
+        g.appendChild(gd);
+
+        // 2. 全屏渲染
+        const fd = document.createElement('div'); fd.className = 'fs-video-item is-paused'; 
+        fd.id = `fs-item-${i}`;
+        fd.setAttribute('data-url', item.url); 
+        if(item.type === 'ad') { fd.setAttribute('data-ad', item.id); fd.setAttribute('data-start', '0'); }
+        
+        fd.innerHTML = `
+            <img class="video-poster" src="${posterUrl}" onerror="this.style.display='none'">
+            <div class="pause-icon">▶</div>
+            <div class="overlay">
+                <span class="fs-user-name">@用户_${1000+i}</span>
+                <span class="fs-desc">${item.desc}</span>
+            </div>
+            <div class="sidebar-fs">
+                <div class="icon-group"><div class="icon-btn-fs heart" onclick="hLike(this, null)">❤</div><div class="fs-count">${item.likes}</div></div>
+                <div class="icon-group"><div class="icon-btn-fs">💬</div><div class="fs-count">${Math.floor(Math.random()*900)+100}</div></div>
+                <div class="icon-group"><div class="icon-btn-fs">🔗</div><div class="fs-count">分享</div></div>
+            </div>`;
+        
+        const hBtn = fd.querySelector('.heart');
+        fd.addEventListener('click', (e) => {
+            if(e.target.closest('.sidebar-fs')) return;
+            if (!fd.contains(globalPlayer)) return;
+
+            if (clickTimer) { 
+                clearTimeout(clickTimer); clickTimer = null; hLike(hBtn, e); 
+            } else { 
+                clickTimer = setTimeout(() => { 
+                    if(globalPlayer.paused){ 
+                        globalPlayer.muted = false; 
+                        globalPlayer.play(); 
+                        fd.classList.remove('is-paused'); 
+                    } else { 
+                        globalPlayer.pause(); 
+                        fd.classList.add('is-paused'); 
+                    } 
+                    clickTimer = null; 
+                }, 250); 
+            }
+        });
+        f.appendChild(fd);
+    });
+}
+
+function enterFS(i) {
+    transitionLock = true; 
+    document.getElementById('grid-top-nav').style.display = 'none';
+    document.getElementById('fullscreen-page-container').classList.add('active');
+    
+    const items = document.querySelectorAll('.fs-video-item');
+    const targetItem = items[i];
+    targetItem.scrollIntoView(); 
+    
+    // 正式进入全屏时，将视频层级恢复为 2（在图片之上）
+    targetItem.appendChild(globalPlayer);
+    globalPlayer.style.zIndex = '2'; 
+    
+    const targetUrl = targetItem.getAttribute('data-url');
+    if (globalPlayer.src !== targetUrl) {
+        globalPlayer.style.opacity = '0';
+        globalPlayer.src = targetUrl;
+    }
+    
+    // 因为这本身是在 click 事件内部执行的，可以直接取消静音并播放，绝对成功
+    globalPlayer.muted = false;
+    globalPlayer.play().catch(() => {
+        globalPlayer.muted = true; 
+        globalPlayer.play().catch(()=>{}); 
+    });
+    
+    targetItem.classList.remove('is-paused');
+    recordTime(targetItem, true);
+    
+    document.getElementById('global-back-btn').style.display = 'flex';
+    setTimeout(() => { transitionLock = false; }, 600); 
+}
+
+function exitFullScreen() {
+    document.querySelectorAll('.fs-video-item[data-viewing="true"]').forEach(el => recordTime(el, false));
+    document.getElementById('grid-top-nav').style.display = 'flex';
+    document.getElementById('fullscreen-page-container').classList.remove('active');
+    
+    globalPlayer.pause();
+    globalPlayer.style.opacity = '0';
+    
+    // 退回双列网格时，再次把播放器藏回 body 最底层
+    document.body.appendChild(globalPlayer);
+    globalPlayer.style.zIndex = '-1';
+    
+    document.getElementById('global-back-btn').style.display = 'none';
+}
+
+const rescueAudio = () => { if (globalPlayer && globalPlayer.muted) globalPlayer.muted = false; };
+document.addEventListener('touchstart', rescueAudio, { passive: true });
+
+function recordTime(el, isEntering) {
+    const adId = el.getAttribute('data-ad'); if (!adId) return;
+    if (isEntering) { el.setAttribute('data-start', Date.now()); el.setAttribute('data-viewing', 'true'); } 
+    else { const start = parseInt(el.getAttribute('data-start')); if (start > 0) { adStats[adId] += (Date.now() - start); el.setAttribute('data-start', '0'); el.setAttribute('data-viewing', 'false'); } }
+}
+
+function hLike(btn, e) {
+    btn.classList.add('liked');
+    const x = e ? e.clientX : window.innerWidth / 2;
+    const y = e ? e.clientY : window.innerHeight / 2;
+    const heart = document.createElement('div'); heart.className = 'floating-heart'; heart.innerHTML = '❤';
+    heart.style.left = x + 'px'; heart.style.top = y + 'px';
+    document.body.appendChild(heart); setTimeout(() => heart.remove(), 800);
+}
+
+function openModal(isFinal) {
+    document.querySelectorAll('.fs-video-item[data-viewing="true"]').forEach(el => recordTime(el, false));
+    const r = Math.random().toString(36).substring(2, 5).toUpperCase();
+    const code = `D-FOL-${r}-${Object.keys(adStats).map(k => `${k}:${(adStats[k]/1000).toFixed(1)}s`).join(',')}`;
+    document.getElementById('code-display').innerText = code;
+    try { navigator.clipboard.writeText(code); } catch(err) {}
+    document.getElementById('result-modal').style.display = 'flex';
+    if(isFinal) exitFullScreen();
+}
+
+function copyCode() { navigator.clipboard.writeText(document.getElementById('code-display').innerText).then(()=>alert("验证码已复制")); }
+
+const obs = new IntersectionObserver(entries => {
+    if (transitionLock || !document.getElementById('fullscreen-page-container').classList.contains('active')) return;
+    
+    entries.forEach(e => {
+        const item = e.target;
+        
+        if (e.isIntersecting) {
+            item.appendChild(globalPlayer);
+            globalPlayer.style.zIndex = '2'; 
+            
+            const targetUrl = item.getAttribute('data-url');
+            
+            if (globalPlayer.src !== targetUrl) {
+                globalPlayer.style.opacity = '0';
+                globalPlayer.src = targetUrl;
+            }
+
+            globalPlayer.muted = false; 
+            globalPlayer.play().catch(()=>{ 
+                globalPlayer.muted = true; 
+                globalPlayer.play().catch(()=>{}); 
+            });
+            
+            item.classList.remove('is-paused');
+            recordTime(item, true);
+        } else {
+            item.classList.add('is-paused');
+            recordTime(item, false);
+        }
+    });
+}, { threshold: 0.65 });
+
+initData(); renderUI();
+document.querySelectorAll('.fs-video-item').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>
